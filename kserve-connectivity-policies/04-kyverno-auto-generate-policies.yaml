@@ -1,0 +1,180 @@
+# Kyverno ClusterPolicies to auto-generate KServe connectivity policies
+# for all Kubeflow user profile namespaces
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: generate-kserve-networkpolicy
+  labels:
+    app.kubernetes.io/part-of: kubeflow
+    app.kubernetes.io/component: kserve-networking
+  annotations:
+    policies.kyverno.io/title: Generate KServe NetworkPolicy
+    policies.kyverno.io/description: >-
+      Generates NetworkPolicy in user namespaces to allow Knative serving
+      components (activator, autoscaler) to reach InferenceService pods.
+spec:
+  rules:
+  - name: generate-netpol-for-knative
+    match:
+      any:
+      - resources:
+          kinds:
+          - Namespace
+          selector:
+            matchLabels:
+              app.kubernetes.io/part-of: kubeflow-profile
+    generate:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      name: allow-knative-serving-to-inferenceservice
+      namespace: "{{request.object.metadata.name}}"
+      synchronize: true
+      data:
+        metadata:
+          labels:
+            app.kubernetes.io/part-of: kubeflow
+            app.kubernetes.io/component: kserve-networking
+            app.kubernetes.io/managed-by: kyverno
+        spec:
+          podSelector:
+            matchExpressions:
+            - key: serving.knative.dev/service
+              operator: Exists
+          ingress:
+          - from:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: knative-serving
+            ports:
+            - protocol: TCP
+              port: 8012
+            - protocol: TCP
+              port: 8022
+            - protocol: TCP
+              port: 9090
+            - protocol: TCP
+              port: 9091
+            - protocol: TCP
+              port: 8080
+          - from:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: istio-system
+            ports:
+            - protocol: TCP
+              port: 8012
+            - protocol: TCP
+              port: 8022
+            - protocol: TCP
+              port: 8080
+          - from:
+            - podSelector: {}
+            ports:
+            - protocol: TCP
+              port: 8080
+            - protocol: TCP
+              port: 8012
+          policyTypes:
+          - Ingress
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: generate-kserve-authorizationpolicy
+  labels:
+    app.kubernetes.io/part-of: kubeflow
+    app.kubernetes.io/component: kserve-networking
+  annotations:
+    policies.kyverno.io/title: Generate KServe AuthorizationPolicy
+    policies.kyverno.io/description: >-
+      Generates Istio AuthorizationPolicy in user namespaces to allow
+      Knative serving components to reach InferenceService pods.
+spec:
+  rules:
+  - name: generate-authz-for-knative
+    match:
+      any:
+      - resources:
+          kinds:
+          - Namespace
+          selector:
+            matchLabels:
+              app.kubernetes.io/part-of: kubeflow-profile
+    generate:
+      apiVersion: security.istio.io/v1beta1
+      kind: AuthorizationPolicy
+      name: allow-knative-serving-system
+      namespace: "{{request.object.metadata.name}}"
+      synchronize: true
+      data:
+        metadata:
+          labels:
+            app.kubernetes.io/part-of: kubeflow
+            app.kubernetes.io/component: kserve-networking
+            app.kubernetes.io/managed-by: kyverno
+        spec:
+          selector:
+            matchExpressions:
+            - key: serving.knative.dev/service
+              operator: Exists
+          action: ALLOW
+          rules:
+          - from:
+            - source:
+                namespaces:
+                - knative-serving
+                - istio-system
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: generate-kserve-probes-authorizationpolicy
+  labels:
+    app.kubernetes.io/part-of: kubeflow
+    app.kubernetes.io/component: kserve-networking
+  annotations:
+    policies.kyverno.io/title: Generate KServe Probes AuthorizationPolicy
+    policies.kyverno.io/description: >-
+      Generates Istio AuthorizationPolicy to allow health probes
+      and metrics scraping for InferenceService pods.
+spec:
+  rules:
+  - name: generate-authz-for-probes
+    match:
+      any:
+      - resources:
+          kinds:
+          - Namespace
+          selector:
+            matchLabels:
+              app.kubernetes.io/part-of: kubeflow-profile
+    generate:
+      apiVersion: security.istio.io/v1beta1
+      kind: AuthorizationPolicy
+      name: allow-knative-probes
+      namespace: "{{request.object.metadata.name}}"
+      synchronize: true
+      data:
+        metadata:
+          labels:
+            app.kubernetes.io/part-of: kubeflow
+            app.kubernetes.io/component: kserve-networking
+            app.kubernetes.io/managed-by: kyverno
+        spec:
+          selector:
+            matchExpressions:
+            - key: serving.knative.dev/service
+              operator: Exists
+          action: ALLOW
+          rules:
+          - to:
+            - operation:
+                paths:
+                - "/healthz"
+                - "/health"
+                - "/ready"
+                - "/readyz"
+                - "/livez"
+                - "/metrics"
+                - "/wait-for-drain"

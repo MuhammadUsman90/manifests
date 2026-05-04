@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: kserve-connectivity-policies
+  labels:
+    app.kubernetes.io/part-of: kubeflow
+    app.kubernetes.io/component: kserve-networking
+
+resources:
+# Cluster-wide policies (apply once)
+- 01-networkpolicy-user-to-cluster-local-gateway.yaml
+
+# Kyverno auto-generation policies (recommended - auto-applies to all user namespaces)
+- 04-kyverno-auto-generate-policies.yaml
+
+# Manual per-namespace policies (use if not using Kyverno)
+# Uncomment and change namespace in each file:
+# - 02-networkpolicy-knative-to-inferenceservice.yaml
+# - 03-authorizationpolicy-knative-to-inferenceservice.yaml
+# - 05-networkpolicy-autoscaler-metrics.yaml
+# - 06-authorizationpolicy-internal-inference.yaml
+
+commonLabels:
+  app.kubernetes.io/part-of: kubeflow
+  app.kubernetes.io/component: kserve-networking

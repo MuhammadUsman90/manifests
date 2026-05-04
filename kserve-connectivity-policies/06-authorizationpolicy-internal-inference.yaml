@@ -1,0 +1,61 @@
+# AuthorizationPolicy: Allow internal cluster traffic to InferenceServices
+# Location: Each user namespace
+# Fixes: Pipeline pods calling InferenceServices, notebook to inference calls
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-internal-inference-traffic
+  namespace: kubeflow-user-example-com  # Change to your user namespace
+  labels:
+    app.kubernetes.io/part-of: kubeflow
+    app.kubernetes.io/component: kserve-networking
+spec:
+  selector:
+    matchExpressions:
+    - key: serving.knative.dev/service
+      operator: Exists
+  action: ALLOW
+  rules:
+  # Allow from any Kubeflow profile namespace
+  - from:
+    - source:
+        namespaceSelector:
+          matchLabels:
+            app.kubernetes.io/part-of: kubeflow-profile
+  # Allow from kubeflow namespace (pipelines, workflows)
+  - from:
+    - source:
+        namespaces:
+        - kubeflow
+  # Allow from argo namespace (workflow pods)
+  - from:
+    - source:
+        namespaces:
+        - argo
+  # Allow authenticated requests via istio-ingressgateway
+  - from:
+    - source:
+        principals:
+        - "cluster.local/ns/istio-system/sa/istio-ingressgateway-service-account"
+---
+# AuthorizationPolicy: Allow inference traffic through cluster-local-gateway
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-cluster-local-gateway-traffic
+  namespace: kubeflow-user-example-com  # Change to your user namespace
+  labels:
+    app.kubernetes.io/part-of: kubeflow
+    app.kubernetes.io/component: kserve-networking
+spec:
+  selector:
+    matchExpressions:
+    - key: serving.knative.dev/service
+      operator: Exists
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - "cluster.local/ns/istio-system/sa/cluster-local-gateway-service-account"

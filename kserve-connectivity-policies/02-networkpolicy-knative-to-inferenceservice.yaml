@@ -1,0 +1,61 @@
+# NetworkPolicy: Allow Knative components to reach InferenceService pods
+# Location: Each user namespace (or use Kyverno to auto-generate)
+# Fixes: 503 errors when activator/autoscaler can't reach InferenceService pods
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-knative-serving-to-inferenceservice
+  namespace: kubeflow-user-example-com  # Change to your user namespace
+  labels:
+    app.kubernetes.io/part-of: kubeflow
+    app.kubernetes.io/component: kserve-networking
+spec:
+  # Target all InferenceService pods (they have serving.knative.dev labels)
+  podSelector:
+    matchExpressions:
+    - key: serving.knative.dev/service
+      operator: Exists
+  ingress:
+  # Allow from Knative Serving namespace (activator, autoscaler, controller)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: knative-serving
+    ports:
+    # Activator to queue-proxy
+    - protocol: TCP
+      port: 8012
+    # Queue-proxy HTTP
+    - protocol: TCP
+      port: 8022
+    # Metrics scraping
+    - protocol: TCP
+      port: 9090
+    - protocol: TCP
+      port: 9091
+    # Health probes
+    - protocol: TCP
+      port: 8080
+  # Allow from istio-system (cluster-local-gateway, istio-ingressgateway)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: istio-system
+    ports:
+    - protocol: TCP
+      port: 8012
+    - protocol: TCP
+      port: 8022
+    - protocol: TCP
+      port: 8080
+  # Allow same namespace traffic
+  - from:
+    - podSelector: {}
+    ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 8012
+  policyTypes:
+  - Ingress

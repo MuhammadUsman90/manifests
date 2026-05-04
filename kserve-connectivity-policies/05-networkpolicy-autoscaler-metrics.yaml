@@ -1,0 +1,46 @@
+# NetworkPolicy: Allow Knative autoscaler to scrape metrics from queue-proxy
+# Location: Each user namespace
+# Fixes: Autoscaling issues when metrics can't be collected
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-knative-autoscaler-metrics
+  namespace: kubeflow-user-example-com  # Change to your user namespace
+  labels:
+    app.kubernetes.io/part-of: kubeflow
+    app.kubernetes.io/component: kserve-networking
+spec:
+  podSelector:
+    matchExpressions:
+    - key: serving.knative.dev/service
+      operator: Exists
+  ingress:
+  # Allow autoscaler to scrape metrics
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: knative-serving
+      podSelector:
+        matchLabels:
+          app: autoscaler
+    ports:
+    - protocol: TCP
+      port: 9090
+    - protocol: TCP
+      port: 9091
+  # Allow activator for stats reporting
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: knative-serving
+      podSelector:
+        matchLabels:
+          app: activator
+    ports:
+    - protocol: TCP
+      port: 9090
+    - protocol: TCP
+      port: 8012
+  policyTypes:
+  - Ingress

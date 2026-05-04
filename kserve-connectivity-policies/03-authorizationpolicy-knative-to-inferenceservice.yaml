@@ -1,0 +1,63 @@
+# AuthorizationPolicy: Allow Knative system components to reach InferenceService pods
+# Location: Each user namespace (or use Kyverno to auto-generate)
+# Fixes: 503/403 errors when Knative activator traffic is blocked by Istio
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-knative-serving-system
+  namespace: kubeflow-user-example-com  # Change to your user namespace
+  labels:
+    app.kubernetes.io/part-of: kubeflow
+    app.kubernetes.io/component: kserve-networking
+spec:
+  # Apply to all InferenceService pods
+  selector:
+    matchExpressions:
+    - key: serving.knative.dev/service
+      operator: Exists
+  action: ALLOW
+  rules:
+  # Allow Knative activator, autoscaler, controller
+  - from:
+    - source:
+        namespaces:
+        - knative-serving
+  # Allow Istio gateways
+  - from:
+    - source:
+        namespaces:
+        - istio-system
+  # Allow same namespace
+  - from:
+    - source:
+        namespaces:
+        - kubeflow-user-example-com  # Change to your user namespace
+---
+# AuthorizationPolicy: Allow health probes and metrics scraping
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-knative-probes
+  namespace: kubeflow-user-example-com  # Change to your user namespace
+  labels:
+    app.kubernetes.io/part-of: kubeflow
+    app.kubernetes.io/component: kserve-networking
+spec:
+  selector:
+    matchExpressions:
+    - key: serving.knative.dev/service
+      operator: Exists
+  action: ALLOW
+  rules:
+  # Allow health check paths from anywhere
+  - to:
+    - operation:
+        paths:
+        - "/healthz"
+        - "/health"
+        - "/ready"
+        - "/readyz"
+        - "/livez"
+        - "/metrics"
+        - "/wait-for-drain"
